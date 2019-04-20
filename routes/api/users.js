@@ -6,6 +6,8 @@ const passport = require("passport");
 
 const tokenKey = require("../../config/keys").tokenKey;
 const User = require("../../models/User"); //Load User model
+const validateRegisterInput = require("../../validation/register");
+const validateLoginInput = require("../../validation/login");
 
 const router = express.Router();
 
@@ -20,6 +22,10 @@ router.get("/test", (request, response) =>
 //@desc Register user
 //@access Public
 router.post("/register", (request, response) => {
+  const { errors, isValid } = validateRegisterInput(request.body);
+  if (!isValid) {
+    return response.status(400).json(errors);
+  }
   User.findOne({ email: request.body.email }).then(user => {
     if (user) {
       return response.status(400).json({ email: "Email already taken" });
@@ -56,17 +62,30 @@ router.post("/register", (request, response) => {
 
 router.post("/login", (request, response) => {
   const { email, password } = request.body;
+  const { errors, isValid } = validateLoginInput(request.body);
+  if (!isValid) {
+    return response.status(400).json(errors);
+  }
   User.findOne({ email }).then(user => {
     if (!user) {
       return response.status(404).json({ email: "User not found" });
     }
-    const tokenPayload = { id: user.id, name: user.name, avatar: user.avatar };
-    jwt.sign(tokenPayload, tokenKey, { expiresIn: 3600 }, (error, token) => {
-      response.json({ success: true, token: "Bearer " + token });
-    });
+
     bcrypt.compare(password, user.password).then(isMatch => {
       if (isMatch) {
-        response.json({ msg: "success" });
+        const tokenPayload = {
+          id: user.id,
+          name: user.name,
+          avatar: user.avatar
+        };
+        jwt.sign(
+          tokenPayload,
+          tokenKey,
+          { expiresIn: 3600 },
+          (error, token) => {
+            response.json({ success: true, token: "Bearer " + token });
+          }
+        );
       } else {
         return response.status(400).json({ password: "password incorrect" });
       }
@@ -77,7 +96,6 @@ router.post("/login", (request, response) => {
 //@route GET api/users/current
 //@desc Return current user
 //@access Private
-
 router.get(
   "/current",
   passport.authenticate("jwt", { session: false }),
